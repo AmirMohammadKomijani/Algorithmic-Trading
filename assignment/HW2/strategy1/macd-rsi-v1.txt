@@ -1,0 +1,47 @@
+//@version=5
+strategy("MACD-RSI",overlay=true)
+
+// Backtesting time range
+start_date = input.time(defval = timestamp("01 Jan 2023 00:00 +0000"), title = "From")
+end_date = input.time(defval = timestamp("01 Mar 2023 00:00 +0000"), title = "Thru")
+
+// rsi config
+RSI_level = input.int(title="RSI-Level",defval=14,minval=1,maxval=22,step=1)
+OverBought = input.int(title="OverBought",defval=70,minval=1,maxval=100,step=1)
+OverSold = input.int(title="OverSold",defval=30,minval=1,maxval=100,step=1)
+RSI = ta.rsi(close,RSI_level)
+
+//macd config
+fastInput = input.int(title="MACD-fastInput",defval=12,minval=1,maxval=100,step=1)
+slowInput = input.int(title="MACD-slowInput",defval=26,minval=1,maxval=100,step=1)
+signal = input.int(title="MACD-signalInput",defval=9,minval=1,maxval=100,step=1)
+[macdLine,signalLine,histLine] = ta.macd(close,fastInput,slowInput,signal)
+
+//Entry conditions
+buyEntry = ta.crossover(RSI,OverBought) and macdLine > 0
+sellEntry = ta.crossunder(RSI,OverSold) and macdLine < 0
+
+// Buy entry condition
+if buyEntry and  time >= start_date and time <= end_date
+    strategy.entry("long",strategy.long)
+
+// sell entry condition
+if sellEntry and time >= start_date and time <= end_date
+    strategy.entry("short",strategy.short)
+
+
+// Exit conditions
+buyExit = ta.crossunder(macdLine,signalLine)
+sellExit = ta.crossover(macdLine,signalLine)
+
+// Exit market
+if buyExit
+    strategy.close("long")
+if sellExit
+    strategy.close("short")
+
+
+// Plot
+plotshape(buyEntry,color = color.new(color.green,0),text = "BUY",textcolor = color.new(color.white,0),style = shape.arrowup)
+plotshape(sellEntry,color = color.new(color.red,0),text = "SELL",textcolor = color.new(color.white,0),style = shape.arrowdown)
+

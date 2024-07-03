@@ -1,0 +1,48 @@
+//@version=5
+strategy("Supertrend-RSI",overlay=true)
+
+// Backtesting time range
+start_date = input.time(defval = timestamp("01 Jan 2023 00:00 +0000"), title = "From")
+end_date = input.time(defval = timestamp("01 Mar 2023 00:00 +0000"), title = "Thru")
+
+// rsi config
+RSI_level = input.int(title="RSI-Level",defval=14,minval=1,maxval=22,step=1)
+OverBought = input.int(title="OverBought",defval=70,minval=1,maxval=100,step=1)
+OverSold = input.int(title="OverSold",defval=30,minval=1,maxval=100,step=1)
+RSI = ta.rsi(close,RSI_level)
+// RSI_MTF = request.security(syminfo.tickerid,"60",RSI[barstate.isrealtime ? 1 : 0])
+
+//supertrend config
+ATR = input.int(title="ATR Length",defval=10,minval=1,maxval=100,step=1)
+Factor = input.float(title="Factor",defval=3,minval=1,maxval=100,step=1)
+[supertrend,direction] = ta.supertrend(Factor,ATR)
+
+
+
+//Entry conditions
+buyEntry = ta.crossover(close,supertrend) and RSI > OverBought
+sellEntry = ta.crossunder(close,supertrend) and RSI < OverSold
+
+
+// Exit condition
+buyExit = ta.crossunder(close,supertrend)
+sellExit = ta.crossover(close,supertrend)
+
+
+if buyEntry and  time >= start_date and time <= end_date
+    strategy.entry("long",strategy.long)
+
+if sellEntry and  time >= start_date and time <= end_date
+    strategy.entry("short",strategy.short)
+
+if buyExit
+    strategy.close("long")
+
+if sellExit
+    strategy.close("short")
+
+
+// Plot
+plotshape(buyEntry,color = color.new(color.green,0),text = "BUY",textcolor = color.new(color.white,0),style = shape.arrowup)
+plotshape(sellEntry,color = color.new(color.red,0),text = "SELL",textcolor = color.new(color.white,0),style = shape.arrowdown)
+

@@ -1,0 +1,68 @@
+//@version=5
+strategy("Combination of MACD and RSI",overlay=true)
+
+
+// Backtesting time range
+start_date = input.time(defval = timestamp("01 Jan 2023 00:00 +0000"), title = "From")
+end_date = input.time(defval = timestamp("01 Mar 2023 00:00 +0000"), title = "Thru")
+
+// rsi config
+RSI_level = input.int(title="RSI-Level",defval=14,minval=1,maxval=22,step=1)
+OverBought = input.int(title="OverBought",defval=70,minval=1,maxval=100,step=1)
+OverSold = input.int(title="OverSold",defval=30,minval=1,maxval=100,step=1)
+RSI = ta.rsi(close,RSI_level)
+
+//macd config
+fastInput = input.int(title="MACD-fastInput",defval=12,minval=1,maxval=100,step=1)
+slowInput = input.int(title="MACD-slowInput",defval=26,minval=1,maxval=100,step=1)
+signal = input.int(title="MACD-signalInput",defval=9,minval=1,maxval=100,step=1)
+[macdLine,signalLine,histLine] = ta.macd(close,fastInput,slowInput,signal)
+
+
+
+// multi timeframe
+RequestSecurityNRP(_tf, _exp, _barmerge) =>
+    request.security(syminfo.tickerid, _tf, _exp[barstate.isrealtime ? 1 : 0], _barmerge)[barstate.isrealtime ? 0 : 1]
+
+
+TimeFrame_4h   = input.timeframe("240",  "Timeframe 4H")
+TimeFrame_daily   = input.timeframe("D",  "Timeframe Daily")
+
+
+// calling timeframes on rsi and macd
+RSI_4h = RequestSecurityNRP(TimeFrame_4h, RSI, barmerge.gaps_on)
+RSI_daily = RequestSecurityNRP(TimeFrame_daily, RSI, barmerge.gaps_on)
+macdLine_4H = RequestSecurityNRP(TimeFrame_4h, macdLine, barmerge.gaps_on)
+macdLine_Daily = RequestSecurityNRP(TimeFrame_daily, macdLine, barmerge.gaps_on)
+
+
+
+//Entry conditions
+buyEntry = ta.crossover(RSI_4h,OverBought) and macdLine_4H > 0 
+sellEntry = ta.crossunder(RSI_4h,OverSold) and macdLine_4H < 0
+buyEntry2 = ta.crossover(RSI_daily,OverBought) and macdLine_Daily > 0 
+sellEntry2 = ta.crossunder(RSI_daily,OverSold) and macdLine_Daily < 0
+
+
+// Buy entry condition
+if (buyEntry or buyEntry2) and time >= start_date and time <= end_date
+    strategy.entry("long",strategy.long)
+
+// sell entry condition
+if (sellEntry or sellEntry) and time >= start_date and time <= end_date
+    strategy.entry("short",strategy.short)
+
+
+// Exit conditions
+buyexit = ta.crossunder(macdLine_4H,signalLine) or ta.crossunder(macdLine_Daily,signalLine)
+sellexit = ta.crossover(macdLine_4H,signalLine) or ta.crossover(macdLine_Daily,signalLine)
+
+// Exit market
+if buyexit
+    strategy.close("long")
+if sellexit
+    strategy.close("short")
+
+// Plot
+plotshape(buyEntry,color = color.new(color.green,0),text = "BUY",textcolor = color.new(color.white,0),style = shape.arrowup)
+plotshape(sellEntry,color = color.new(color.red,0),text = "SELL",textcolor = color.new(color.white,0),style = shape.arrowdown)

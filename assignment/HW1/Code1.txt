@@ -1,0 +1,37 @@
+//@version=5
+strategy("VWAP Crossover")
+vwap = ta.vwap(hlc3)
+// plot(vwap, title="VWAP")
+
+buy = ta.crossover(open, vwap) and ta.crossunder(close, vwap)
+sell = ta.crossunder(open, vwap) and ta.crossover(close, vwap)
+
+// stop loss and take profit
+TP = input(10, title="Take Profit (%)") / 100
+SL = input(5, title="Stop Loss (%)") / 100
+
+start_date = input.time(defval = timestamp("01 Jan 2023 00:00 +0000"), title = "From")
+end_date = input.time(defval = timestamp("01 Mar 2023 00:00 +0000"), title = "Thru")
+
+// Entry for Buy
+if buy and  time >= start_date and time <= end_date
+    strategy.entry("Buy", strategy.long,qty = 10)
+
+// Entry for Sell
+if sell and time >= start_date and time <= end_date
+    strategy.entry("Sell", strategy.short,qty = 10)
+
+// my conditions for closing the buy(long) trade
+BuyProfitLimit = vwap * (1 + TP)
+BuySL = vwap * (1 - SL)
+
+// my conditions for closing the sell(short) trade
+SellProfitLimit = vwap * (1 - TP)
+SellSL = vwap * (1 + SL)
+
+// Exit with Stop and Limit levels
+strategy.exit("Take Profit/Stop Loss", from_entry="Buy", stop=BuySL, limit=BuyProfitLimit)
+strategy.exit("Take Profit/Stop Loss", from_entry="Sell", stop=SellSL, limit=SellProfitLimit)
+
+plotshape(buy, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+plotshape(sell, style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small)

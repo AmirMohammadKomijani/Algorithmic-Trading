@@ -1,0 +1,102 @@
+//@version=5
+strategy("VWAP Crossover",overlay=true)
+
+hideonDWM = input(false, title="Hide VWAP on 1D or Above", group="VWAP Settings")
+var anchor = input.string(defval = "Session", title="Anchor Period", options=["Session", "Week", "Month", "Quarter", "Year", "Decade", "Century", "Earnings", "Dividends", "Splits"], group="VWAP Settings")
+src = input(title = "Source", defval = hlc3, group="VWAP Settings")
+offset = input.int(0, title="Offset", group="VWAP Settings", minval=0)
+
+BANDS_GROUP = "Bands Settings"
+CALC_MODE_TOOLTIP = "Determines the units used to calculate the distance of the bands. When 'Percentage' is selected, a multiplier of 1 means 1%."
+calcModeInput = input.string("Standard Deviation", "Bands Calculation Mode", options = ["Standard Deviation", "Percentage"], group = BANDS_GROUP, tooltip = CALC_MODE_TOOLTIP)
+showBand_1 = input(true, title = "", group = BANDS_GROUP, inline = "band_1")
+bandMult_1 = input.float(1.0, title = "Bands Multiplier #1", group = BANDS_GROUP, inline = "band_1", step = 0.5, minval=0)
+showBand_2 = input(false, title = "", group = BANDS_GROUP, inline = "band_2")
+bandMult_2 = input.float(2.0, title = "Bands Multiplier #2", group = BANDS_GROUP, inline = "band_2", step = 0.5, minval=0)
+showBand_3 = input(false, title = "", group = BANDS_GROUP, inline = "band_3")
+bandMult_3 = input.float(3.0, title = "Bands Multiplier #3", group = BANDS_GROUP, inline = "band_3", step = 0.5, minval=0)
+
+if barstate.islast and ta.cum(volume) == 0
+    runtime.error("No volume is provided by the data vendor.")
+
+new_earnings = request.earnings(syminfo.tickerid, earnings.actual, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_dividends = request.dividends(syminfo.tickerid, dividends.gross, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+new_split = request.splits(syminfo.tickerid, splits.denominator, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol=true)
+
+isNewPeriod = switch anchor
+    "Earnings"  => not na(new_earnings)
+    "Dividends" => not na(new_dividends)
+    "Splits"    => not na(new_split)
+    "Session"   => timeframe.change("D")
+    "Week"      => timeframe.change("W")
+    "Month"     => timeframe.change("M")
+    "Quarter"   => timeframe.change("3M")
+    "Year"      => timeframe.change("12M")
+    "Decade"    => timeframe.change("12M") and year % 10 == 0
+    "Century"   => timeframe.change("12M") and year % 100 == 0
+    => false
+
+isEsdAnchor = anchor == "Earnings" or anchor == "Dividends" or anchor == "Splits"
+if na(src[1]) and not isEsdAnchor
+    isNewPeriod := true
+
+float vwapValue = na
+float upperBandValue1 = na
+float lowerBandValue1 = na
+float upperBandValue2 = na
+float lowerBandValue2 = na
+float upperBandValue3 = na
+float lowerBandValue3 = na
+float stopLossPrice = na
+float takeProfitPrice = na
+
+if not (hideonDWM and timeframe.isdwm)
+    [_vwap, _stdevUpper, _] = ta.vwap(src, isNewPeriod, 1)
+    vwapValue := _vwap
+    stdevAbs = _stdevUpper - _vwap
+    bandBasis = calcModeInput == "Standard Deviation" ? stdevAbs : _vwap * 0.01
+    upperBandValue1 := _vwap + bandBasis * bandMult_1
+    lowerBandValue1 := _vwap - bandBasis * bandMult_1
+    upperBandValue2 := _vwap + bandBasis * bandMult_2
+    lowerBandValue2 := _vwap - bandBasis * bandMult_2
+    upperBandValue3 := _vwap + bandBasis * bandMult_3
+    lowerBandValue3 := _vwap - bandBasis * bandMult_3
+
+
+start_date = input.time(defval = timestamp("01 Jan 2023 00:00 +0000"), title = "start")
+end_date = input.time(defval = timestamp("01 Mar 2023 00:00 +0000"), title = "end")
+date() => time >= start_date and time <= end_date  // create date function "within window of time"
+
+
+
+
+
+// buy = ta.crossover(close, vwapValue)
+// sell = ta.crossunder(close, vwapValue)
+
+buy = ta.crossover(close, vwapValue) and ta.crossover(close, vwapValue[1])
+sell = ta.crossunder(close, vwapValue) and ta.crossunder(close, vwapValue[1])
+
+SL = input(5, title="Stop Loss Percent")
+TP = input(10, title="Take Profit Percent")
+
+
+if buy and time >= start_date and time <= end_date
+    stopLossPrice := vwapValue * (1 - SL)
+    takeProfitPrice := vwapValue * (1 + TP)
+else if sell and time >= start_date and time <= end_date
+    stopLossPrice := vwapValue * (1 + SL)
+    takeProfitPrice := vwapValue * (1 - TP)
+
+// plotshape(buy, style=shape.triangleup, location=location.belowbar, color=color.green, title="Buy Signal")
+// plotshape(sell, style=shape.triangledown, location=location.abovebar, color=color.red, title="Sell Signal")
+
+if buy and time >= start_date and time <= end_date
+    strategy.entry("Buy", strategy.long, qty=100)
+else if sell and time >= start_date and time <= end_date
+    strategy.entry("Sell", strategy.short, qty = 100)
+
+strategy.exit("StopLoss/TakeProfit", from_entry="Buy", stop=stopLossPrice, limit=takeProfitPrice)
+strategy.exit("StopLoss/TakeProfit", from_entry="Sell", stop=stopLossPrice, limit=takeProfitPrice)
+
+plot(vwapValue, color=color.blue, title="VWAP")
